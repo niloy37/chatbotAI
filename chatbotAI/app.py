@@ -64,7 +64,7 @@ qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
     retriever=retriever,
-    return_source_documents=False,
+    return_source_documents=True,  # Enable source documents for debugging
     chain_type_kwargs={"prompt": prompt}
 )
 
@@ -82,10 +82,27 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        answer = qa_chain.invoke({"query": question})
+        # Use a more explicit input format
+        result = qa_chain.invoke({
+            "query": question,
+            "input": question  # Some versions of RetrievalQA might expect this
+        })
+        
+        # Handle the response based on whether source documents are included
+        if isinstance(result, dict) and "result" in result:
+            answer = result["result"]
+        else:
+            answer = result
+            
         return jsonify({'answer': answer})
     except Exception as e:
         print(f"Error: {str(e)}")
+        # Return more detailed error information in development
+        if app.debug:
+            return jsonify({
+                'answer': 'Sorry, I encountered an error.',
+                'error': str(e)
+            })
         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
 
 if __name__ == '__main__':
