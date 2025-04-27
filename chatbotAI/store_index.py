@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from src.helper import load_pdf_file, text_split, download_embeddings
-from langchain_community.vectorstores import Pinecone
+from langchain.vectorstores import Pinecone
 from pinecone import Pinecone, ServerlessSpec
 
 # Load environment variables
