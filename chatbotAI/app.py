@@ -74,10 +74,9 @@ qa_chain = RetrievalQA.from_chain_type(
 # Initialize Flask app
 app = Flask(__name__)
 
-
-
-app = Flask(__name__)
-# … your Pinecone / LLM / RetrievalQA setup …
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/ask', methods=['POST'])
 def ask():
