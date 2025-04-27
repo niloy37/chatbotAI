@@ -86,27 +86,19 @@ def ask():
         return jsonify({'answer': 'Please provide a question.'})
 
     try:
-        # correctly invoke the chain with its 'query' input key
-        result = qa_chain({ "query": question })
+        # ===> switch to .invoke and try the "question" key
+        result = qa_chain.invoke({ "question": question })
 
-        # extract the answer from the dict
-        if isinstance(result, dict):
-            answer = result.get("result") or result.get("answer") or ""
-        else:
-            # some versions return a raw string
-            answer = str(result)
+        # pull out the answer string
+        answer = result.get("result") or result.get("answer") or ""
+        # (if you want the docs too: docs = result["source_documents"])
 
         return jsonify({'answer': answer})
 
     except Exception as e:
-        # will now correctly print to stderr
         print(f"Error in /ask: {e}", file=sys.stderr)
-
         if app.debug:
-            return jsonify({
-                'answer': 'Sorry, I encountered an error.',
-                'error': str(e)
-            })
+            return jsonify({'answer': 'Sorry, I encountered an error.', 'error': str(e)})
         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
 
 
