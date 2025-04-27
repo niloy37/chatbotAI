@@ -1,7 +1,7 @@
 flask==3.0.2
 gunicorn==21.2.0
 python-dotenv==1.0.1
-
+langchain-community>=0.0.30
 langchain[pinecone]==0.3.24
 langchain-google-genai>=2,<3
 pypdf==3.16.0
