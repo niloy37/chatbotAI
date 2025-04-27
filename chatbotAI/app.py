@@ -65,6 +65,7 @@ qa_chain = RetrievalQA.from_chain_type(
     chain_type="stuff",
     retriever=retriever,
     return_source_documents=True,  # Enable source documents for debugging
+    input_key="query",  # Explicitly specify the input key
     chain_type_kwargs={"prompt": prompt}
 )
 
@@ -82,11 +83,8 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        # Use a more explicit input format
-        result = qa_chain.invoke({
-            "query": question,
-            "input": question  # Some versions of RetrievalQA might expect this
-        })
+        # Simplified input format since we specified input_key
+        result = qa_chain.invoke({"query": question})
         
         # Handle the response based on whether source documents are included
         if isinstance(result, dict) and "result" in result:
