@@ -2,7 +2,7 @@ import os
 import sys
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.helper import get_embedding_model
 from langchain_community.vectorstores import Pinecone as LangChainPinecone
@@ -20,8 +20,26 @@ if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
-timezone = PINECONE_ENV
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+pc = Pinecone(
+    api_key=PINECONE_API_KEY
+)
+
+# Ensure index exists (optional - skip if index already managed elsewhere)
+# if INDEX_NAME not in [idx.name for idx in pc.list_indexes().names()]:
+#     pc.create_index(
+#         name=INDEX_NAME,
+#         dimension=768,
+#         metric="cosine",
+#         spec=ServerlessSpec(
+#             cloud="aws",
+#             region=PINECONE_ENV  # adjust if needed
+#         )
+#     )
+
+# Connect to existing Pinecone index instance
+tree = pc.Index(
+    name="chatbotai"
+)
 
 # Initialize Gemini LLM
 llm = ChatGoogleGenerativeAI(
@@ -34,11 +52,11 @@ llm = ChatGoogleGenerativeAI(
 # Initialize embeddings model
 embeddings = get_embedding_model()
 
-# Connect to existing Pinecone index
-INDEX_NAME = "chatbotai"
-vector_store = LangChainPinecone.from_existing_index(
-    index_name=INDEX_NAME,
-    embedding=embeddings
+# Build LangChain Pinecone vector store from existing index
+vector_store = LangChainPinecone(
+    pinecone_index=tree,
+    embedding=embeddings,
+    text_key="text"
 )
 
 # Build retriever
@@ -47,7 +65,7 @@ retriever = vector_store.as_retriever(
     search_kwargs={"k": 3}
 )
 
-# Define system prompt with {context} and {query}
+# Define system prompt template
 system_prompt = (
     "You are an assistant for question-answering tasks. "
     "Use the following pieces of retrieved context to answer the question. "
@@ -57,14 +75,12 @@ system_prompt = (
     "Question: {query}\n"
     "Answer: "
 )
-
-# Create PromptTemplate
 prompt = PromptTemplate(
     template=system_prompt,
     input_variables=["context", "query"],
 )
 
-# Build RetrievalQA chain, telling it to use 'query' as input_key
+# Build RetrievalQA chain
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
@@ -90,7 +106,6 @@ def ask():
         return jsonify({'answer': 'Please provide a question.'})
 
     try:
-        # Invoke the chain with the correct key
         result = qa_chain.invoke({"query": question})
         answer = result.get('result', '')
         return jsonify({'answer': answer})
