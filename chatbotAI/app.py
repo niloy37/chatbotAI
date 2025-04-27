@@ -67,7 +67,8 @@ qa_chain = RetrievalQA.from_chain_type(
     retriever=retriever,
     return_source_documents=True,
     chain_type_kwargs={
-        "prompt": prompt
+        "prompt": prompt,
+        "input_key": "query"
     }
 )
 
