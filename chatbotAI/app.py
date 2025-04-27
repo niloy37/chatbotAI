@@ -20,11 +20,12 @@ if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
-pc = Pinecone(
-    api_key=PINECONE_API_KEY
-)
+pc = Pinecone(api_key=PINECONE_API_KEY)
 
-# Ensure index exists (optional - skip if index already managed elsewhere)
+# Define index name
+INDEX_NAME = "chatbotai"
+
+# (Optional) ensure index exists; comment out if index already created
 # if INDEX_NAME not in [idx.name for idx in pc.list_indexes().names()]:
 #     pc.create_index(
 #         name=INDEX_NAME,
@@ -32,14 +33,9 @@ pc = Pinecone(
 #         metric="cosine",
 #         spec=ServerlessSpec(
 #             cloud="aws",
-#             region=PINECONE_ENV  # adjust if needed
+#             region=PINECONE_ENV
 #         )
 #     )
-
-# Connect to existing Pinecone index instance
-tree = pc.Index(
-    name="chatbotai"
-)
 
 # Initialize Gemini LLM
 llm = ChatGoogleGenerativeAI(
@@ -52,11 +48,10 @@ llm = ChatGoogleGenerativeAI(
 # Initialize embeddings model
 embeddings = get_embedding_model()
 
-# Build LangChain Pinecone vector store from existing index
-vector_store = LangChainPinecone(
-    pinecone_index=tree,
-    embedding=embeddings,
-    text_key="text"
+# Connect to existing Pinecone index in LangChain vector store
+vector_store = LangChainPinecone.from_existing_index(
+    index_name=INDEX_NAME,
+    embedding=embeddings
 )
 
 # Build retriever
@@ -104,12 +99,10 @@ def ask():
     question = data.get('question', '').strip()
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
-
     try:
         result = qa_chain.invoke({"query": question})
         answer = result.get('result', '')
         return jsonify({'answer': answer})
-
     except Exception as e:
         print(f"Error in /ask: {e}", file=sys.stderr)
         if app.debug:
