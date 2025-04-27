@@ -1,10 +1,12 @@
 import os
 from dotenv import load_dotenv
-import pinecone
-
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.document_loaders import PyPDFLoader, DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Pinecone as LangChainPinecone
+from pinecone import Pinecone, ServerlessSpec
+
 from src.helper import load_pdf_file, text_split, get_embedding_model
-from langchain_community.vectorstores import Pinecone
 
 # Load environment variables
 load_dotenv()
@@ -12,16 +14,12 @@ load_dotenv()
 # Get API keys and environment
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
 
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
-    raise ValueError("Missing required environment variables. Check your .env file.")
+if not all([GOOGLE_API_KEY, PINECONE_API_KEY]):
+    raise ValueError("Missing required API keys. Check your .env file.")
 
-# Initialize Pinecone client
-pinecone.init(
-    api_key=PINECONE_API_KEY,
-    environment=PINECONE_ENV
-)
+# Initialize Pinecone
+pc = Pinecone(api_key=PINECONE_API_KEY)
 
 # Initialize the Gemini LLM
 llm = ChatGoogleGenerativeAI(
@@ -53,7 +51,7 @@ chunks = text_split(
     chunk_size=500,
     chunk_overlap=20
 )
-vector_store = Pinecone.from_documents(
+vector_store = LangChainPinecone.from_documents(
     documents=chunks,
     embedding=embeddings,
     index_name=INDEX_NAME
