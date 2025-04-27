@@ -1,63 +1,78 @@
+```python
+# store_index.py
 import os
+import glob
 from dotenv import load_dotenv
-from src.helper import load_pdf_file, text_split, download_embeddings
+import pinecone
+from typing import Optional
+
+from src.helper import load_pdf_file, text_split, get_embedding_model
 from langchain.vectorstores import Pinecone
-from pinecone import Pinecone, ServerlessSpec
 
 # Load environment variables
 load_dotenv()
 
-# Get API keys
+# Get API keys and environment
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
 
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY]):
-    raise ValueError("Missing required API keys. Check your .env file.")
+if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
+    raise ValueError("Missing required environment variables. Check your .env file.")
 
-# Initialize Pinecone
-pc = Pinecone(
-    api_key=PINECONE_API_KEY
+# Initialize Pinecone client
+pinecone.init(
+    api_key=PINECONE_API_KEY,
+    environment=PINECONE_ENV
 )
 
-# Load and process PDFs
-def create_vector_store():
+
+def create_vector_store(
+    data_path: str = "Data/",
+    index_name: str = "chatbotai",
+    dimension: int = 768,
+    metric: str = "cosine",
+    chunk_size: int = 500,
+    chunk_overlap: int = 20
+) -> Pinecone:
     """
-    Create a vector store from PDF documents using Pinecone.
+    Load PDFs, split into chunks, initialize index if needed, and upsert to Pinecone.
     Returns:
-        PineconeVectorStore: The created vector store
+        Pinecone: The LangChain Pinecone vector store instance.
     """
-    # Load PDFs
-    extracted_data = load_pdf_file(data='Data/')
-    
-    # Split into chunks
-    text_chunks = text_split(extracted_data)
-    
-    # Get embeddings model
-    embeddings = download_embeddings()
-    
-    # Create or get index
-    index_name = "chatbotai"
-    if index_name not in pc.list_indexes().names():
-        pc.create_index(
+    # 1) Load and parse documents
+    docs = load_pdf_file(data_path)
+
+    # 2) Split into text chunks
+    chunks = text_split(
+        documents=docs,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap
+    )
+
+    # 3) Get embedding model
+    embeddings = get_embedding_model()
+
+    # 4) Create index if it doesn't exist
+    existing_indexes = pinecone.list_indexes()
+    if index_name not in existing_indexes:
+        pinecone.create_index(
             name=index_name,
-            dimension=768,  # Dimension for Gemini embeddings
-            metric="cosine",
-            spec=ServerlessSpec(
-                cloud="aws",
-                region="us-west-2"
-            )
+            dimension=dimension,
+            metric=metric
         )
-    
-    # Create vector store
-    docsearch = Pinecone.from_documents(
-        documents=text_chunks,
+
+    # 5) Build and return the vector store
+    store = Pinecone.from_documents(
+        documents=chunks,
         embedding=embeddings,
         index_name=index_name
     )
-    
-    return docsearch
+
+    return store
+
 
 if __name__ == "__main__":
-    # Create the vector store
-    vector_store = create_vector_store()
-    print("Vector store created successfully!") 
+    vs = create_vector_store()
+    print(f"Vector store '{vs.index_name}' created successfully with {len(vs._index.describe_index_stats()['namespaces'])} namespaces.")
+```
