@@ -1,68 +1,78 @@
-from flask import Flask, render_template, request, jsonify
-from src.helper import download_embeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.vectorstores import Pinecone
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
 import os
+from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
+import pinecone
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from src.helper import get_embedding_model
+from langchain.vectorstores import Pinecone
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import RetrievalQA
 
 # Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+# Get API keys and environment
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
+if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
+    raise ValueError("Missing required environment variables. Check your .env file.")
 
-# Initialize the Gemini model
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",
-    temperature=0.3,
-    google_api_key=os.getenv("GOOGLE_API_KEY")
+# Initialize Pinecone client
+pinecone.init(
+    api_key=PINECONE_API_KEY,
+    environment=PINECONE_ENV
 )
 
-# Get embeddings
-embeddings = download_embeddings()
+# Initialize Gemini LLM
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-pro",
+    google_api_key=GOOGLE_API_KEY,
+    temperature=0.3,
+    convert_system_message_to_human=True
+)
 
-# Get existing Pinecone index
-index_name = "chatbotai"
+# Initialize embeddings model
+embeddings = get_embedding_model()
 
-# Initialize vector store
-docsearch = Pinecone.from_existing_index(
-    index_name=index_name,
+# Connect to existing Pinecone index
+INDEX_NAME = "chatbotai"
+vector_store = Pinecone.from_existing_index(
+    index_name=INDEX_NAME,
     embedding=embeddings
 )
 
-# Create retriever
-retriever = docsearch.as_retriever(
+# Build retriever
+retriever = vector_store.as_retriever(
     search_type="similarity",
     search_kwargs={"k": 3}
 )
 
-# Create system prompt
-system_prompt = (" You are an assistant for question-answering tasks."
-                 "Use the following pieces of retrieved context to answer the question."
-                 "the question If you don't know the answer, just say that you don't know. Don't make up an answer."
-                 "Answer in a concise and friendly manner."
-                 "\n\n"
-                 "{context}"
-                 )
-
-# Create prompt template
+# Custom system prompt
+system_prompt = (
+    "You are an assistant for question-answering tasks. "
+    "Use the following pieces of retrieved context to answer the question. "
+    "If you don't know the answer, just say that you don't know. Don't make up an answer. "
+    "Answer in a concise and friendly manner.\n\n"
+    "{context}"
+)
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
     ("human", "{input}")
 ])
 
-# Create chains
-question_answer_chain = create_stuff_documents_chain(
+# Create RetrievalQA chain with custom prompt
+qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
-    prompt=prompt
+    chain_type="stuff",
+    retriever=retriever,
+    return_source_documents=False,
+    chain_type_kwargs={"prompt": prompt}
 )
 
-rag_chain = create_retrieval_chain(
-    retriever=retriever,
-    combine_docs_chain=question_answer_chain
-)
+# Initialize Flask app
+app = Flask(__name__)
 
 @app.route('/')
 def home():
@@ -71,17 +81,12 @@ def home():
 @app.route('/ask', methods=['POST'])
 def ask():
     data = request.get_json()
-    question = data.get('question', '')
-    
+    question = data.get('question', '').strip()
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
-    
     try:
-        # Get response using the RAG chain
-        response = rag_chain.invoke({"input": question})
-        
-        return jsonify({'answer': response["answer"]})
-    
+        answer = qa_chain.run(question)
+        return jsonify({'answer': answer})
     except Exception as e:
         print(f"Error: {str(e)}")
         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
