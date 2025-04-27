@@ -1,12 +1,12 @@
 import os
+import sys
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
-from pinecone import Pinecone, ServerlessSpec
-import sys
+import pinecone
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.helper import get_embedding_model
 from langchain_community.vectorstores import Pinecone as LangChainPinecone
-from langchain.prompts import ChatPromptTemplate
+from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 
 # Load environment variables
@@ -20,7 +20,8 @@ if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
-pc = Pinecone(api_key=PINECONE_API_KEY)
+timezone = PINECONE_ENV
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 
 # Initialize Gemini LLM
 llm = ChatGoogleGenerativeAI(
@@ -46,7 +47,7 @@ retriever = vector_store.as_retriever(
     search_kwargs={"k": 3}
 )
 
-# Custom system prompt
+# Define system prompt with {context} and {query}
 system_prompt = (
     "You are an assistant for question-answering tasks. "
     "Use the following pieces of retrieved context to answer the question. "
@@ -57,19 +58,21 @@ system_prompt = (
     "Answer: "
 )
 
-# Create prompt template
-prompt = ChatPromptTemplate.from_template(system_prompt)
+# Create PromptTemplate
+prompt = PromptTemplate(
+    template=system_prompt,
+    input_variables=["context", "query"],
+)
 
-# Create RetrievalQA chain with custom prompt
+# Build RetrievalQA chain, telling it to use 'query' as input_key
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
     retriever=retriever,
     return_source_documents=True,
-    chain_type_kwargs={
-        "prompt": prompt,
-        "input_key": "query"
-    }
+    input_key="query",
+    output_key="result",
+    chain_type_kwargs={"prompt": prompt},
 )
 
 # Initialize Flask app
@@ -87,21 +90,15 @@ def ask():
         return jsonify({'answer': 'Please provide a question.'})
 
     try:
-        # invoke the chain with the "query" key
-        result = qa_chain.invoke({ "query": question })
-
-        # extract the answer
-        answer = result.get("result") or result.get("answer") or ""
+        # Invoke the chain with the correct key
+        result = qa_chain.invoke({"query": question})
+        answer = result.get('result', '')
         return jsonify({'answer': answer})
 
     except Exception as e:
-        # log to stderr
         print(f"Error in /ask: {e}", file=sys.stderr)
         if app.debug:
-            return jsonify({
-                'answer': 'Sorry, I encountered an error.',
-                'error': str(e)
-            })
+            return jsonify({'answer': 'Sorry, I encountered an error.', 'error': str(e)})
         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
 
 if __name__ == '__main__':
