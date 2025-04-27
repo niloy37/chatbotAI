@@ -65,8 +65,10 @@ qa_chain = RetrievalQA.from_chain_type(
     chain_type="stuff",
     retriever=retriever,
     return_source_documents=True,  # Enable source documents for debugging
-    input_key="query",  # Explicitly specify the input key
-    chain_type_kwargs={"prompt": prompt}
+    chain_type_kwargs={
+        "prompt": prompt,
+        "input_variables": ["query", "context"]  # Explicitly specify input variables
+    }
 )
 
 # Initialize Flask app
@@ -83,14 +85,22 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        # Simplified input format since we specified input_key
-        result = qa_chain.invoke({"query": question})
+        # Use a more structured input format
+        result = qa_chain.invoke({
+            "input": question,  # Try with 'input' key
+            "query": question   # Also include 'query' key
+        })
         
         # Handle the response based on whether source documents are included
-        if isinstance(result, dict) and "result" in result:
-            answer = result["result"]
+        if isinstance(result, dict):
+            if "result" in result:
+                answer = result["result"]
+            elif "answer" in result:
+                answer = result["answer"]
+            else:
+                answer = str(result)
         else:
-            answer = result
+            answer = str(result)
             
         return jsonify({'answer': answer})
     except Exception as e:
