@@ -1,11 +1,11 @@
 import os
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.helper import get_embedding_model
-from langchain.vectorstores import Pinecone
+from langchain_community.vectorstores import Pinecone as LangChainPinecone
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import RetrievalQA
 
@@ -20,10 +20,7 @@ if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
-pinecone.init(
-    api_key=PINECONE_API_KEY,
-    environment=PINECONE_ENV
-)
+pc = Pinecone(api_key=PINECONE_API_KEY)
 
 # Initialize Gemini LLM
 llm = ChatGoogleGenerativeAI(
@@ -38,7 +35,7 @@ embeddings = get_embedding_model()
 
 # Connect to existing Pinecone index
 INDEX_NAME = "chatbotai"
-vector_store = Pinecone.from_existing_index(
+vector_store = LangChainPinecone.from_existing_index(
     index_name=INDEX_NAME,
     embedding=embeddings
 )
