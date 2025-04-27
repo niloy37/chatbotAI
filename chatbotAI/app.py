@@ -52,21 +52,24 @@ system_prompt = (
     "Use the following pieces of retrieved context to answer the question. "
     "If you don't know the answer, just say that you don't know. Don't make up an answer. "
     "Answer in a concise and friendly manner.\n\n"
-    "{context}"
+    "Context: {context}\n"
+    "Question: {question}\n"
+    "Answer: "
 )
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    ("human", "{query}")
-])
+
+# Create prompt template
+prompt = ChatPromptTemplate.from_template(system_prompt)
 
 # Create RetrievalQA chain with custom prompt
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
     retriever=retriever,
-    return_source_documents=True,  # Enable source documents for debugging
+    return_source_documents=True,
     chain_type_kwargs={
-        "prompt": prompt
+        "prompt": prompt,
+        "document_variable_name": "context",
+        "question_variable_name": "question"
     }
 )
 
@@ -84,13 +87,12 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        # Use a more structured input format
+        # Use a more explicit input format
         result = qa_chain.invoke({
-            "input": question,  # Try with 'input' key
-            "query": question   # Also include 'query' key
+            "question": question
         })
         
-        # Handle the response based on whether source documents are included
+        # Handle the response
         if isinstance(result, dict):
             if "result" in result:
                 answer = result["result"]
