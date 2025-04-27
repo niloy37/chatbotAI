@@ -74,9 +74,10 @@ qa_chain = RetrievalQA.from_chain_type(
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return render_template('index.html')
+
+
+app = Flask(__name__)
+# … your Pinecone / LLM / RetrievalQA setup …
 
 @app.route('/ask', methods=['POST'])
 def ask():
@@ -86,21 +87,22 @@ def ask():
         return jsonify({'answer': 'Please provide a question.'})
 
     try:
-        # ===> switch to .invoke and try the "question" key
-        result = qa_chain.invoke({ "question": question })
+        # invoke the chain with the "query" key
+        result = qa_chain.invoke({ "query": question })
 
-        # pull out the answer string
+        # extract the answer
         answer = result.get("result") or result.get("answer") or ""
-        # (if you want the docs too: docs = result["source_documents"])
-
         return jsonify({'answer': answer})
 
     except Exception as e:
+        # log to stderr
         print(f"Error in /ask: {e}", file=sys.stderr)
         if app.debug:
-            return jsonify({'answer': 'Sorry, I encountered an error.', 'error': str(e)})
+            return jsonify({
+                'answer': 'Sorry, I encountered an error.',
+                'error': str(e)
+            })
         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
-
 
 if __name__ == '__main__':
     app.run(debug=True)
