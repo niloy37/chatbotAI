@@ -53,7 +53,7 @@ system_prompt = (
     "If you don't know the answer, just say that you don't know. Don't make up an answer. "
     "Answer in a concise and friendly manner.\n\n"
     "Context: {context}\n"
-    "Question: {question}\n"
+    "Question: {query}\n"
     "Answer: "
 )
 
@@ -67,9 +67,7 @@ qa_chain = RetrievalQA.from_chain_type(
     retriever=retriever,
     return_source_documents=True,
     chain_type_kwargs={
-        "prompt": prompt,
-        "document_variable_name": "context",
-        "question_variable_name": "question"
+        "prompt": prompt
     }
 )
 
@@ -87,9 +85,9 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        # Use a more explicit input format
+        # Use the correct input format
         result = qa_chain.invoke({
-            "question": question
+            "query": question
         })
         
         # Handle the response
