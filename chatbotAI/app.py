@@ -56,7 +56,7 @@ system_prompt = (
 )
 prompt = ChatPromptTemplate.from_messages([
     ("system", system_prompt),
-    ("human", "{input}")
+    ("human", "{query}")
 ])
 
 # Create RetrievalQA chain with custom prompt
@@ -82,7 +82,7 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        answer = qa_chain.run({"query": question})
+        answer = qa_chain.invoke({"query": question})
         return jsonify({'answer': answer})
     except Exception as e:
         print(f"Error: {str(e)}")
