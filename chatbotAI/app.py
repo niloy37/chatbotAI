@@ -78,35 +78,29 @@ app = Flask(__name__)
 def home():
     return render_template('index.html')
 
-@@ app.py
- @app.route('/ask', methods=['POST'])
- def ask():
-     data = request.get_json()
-     question = data.get('question', '').strip()
-     if not question:
-         return jsonify({'answer': 'Please provide a question.'})
-     try:
--        # this was failing:
--        result = qa_chain.invoke({
--            "query": question
--        })
--        # pick out the right key
--        if isinstance(result, dict):
--            answer = result.get("result", result.get("answer", str(result)))
--        else:
--            answer = str(result)
-+        # simpler: run just returns the answer text
-+        answer = qa_chain.run(question)
- 
-         return jsonify({'answer': answer})
-     except Exception as e:
-         print(f"Error: {str(e)}")
-         if app.debug:
-             return jsonify({
-                 'answer': 'Sorry, I encountered an error.',
-                 'error': str(e)
-             })
-         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
+@app.route('/ask', methods=['POST'])
+def ask():
+    data = request.get_json()
+    question = data.get('question', '').strip()
+    if not question:
+        return jsonify({'answer': 'Please provide a question.'})
+
+    try:
+        # instead of .invoke({ "query": question })
+        # just run the chain with the question text
+        answer = qa_chain.run(question)
+        return jsonify({'answer': answer})
+
+    except Exception as e:
+        # log the error for debugging
+        print(f"Error in /ask: {e}", file=sys.stderr)
+
+        if app.debug:
+            return jsonify({
+                'answer': 'Sorry, I encountered an error.',
+                'error': str(e)
+            })
+        return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
 
 if __name__ == '__main__':
     app.run(debug=True)
