@@ -1,4 +1,3 @@
-```python
 # store_index.py
 import os
 import glob
@@ -7,7 +6,7 @@ import pinecone
 from typing import Optional
 
 from src.helper import load_pdf_file, text_split, get_embedding_model
-from langchain.vectorstores import Pinecone
+from langchain_community.vectorstores import Pinecone
 
 # Load environment variables
 load_dotenv()

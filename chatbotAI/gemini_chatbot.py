@@ -4,7 +4,7 @@ import pinecone
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.helper import load_pdf_file, text_split, get_embedding_model
-from langchain.vectorstores import Pinecone
+from langchain_community.vectorstores import Pinecone
 
 # Load environment variables
 load_dotenv()

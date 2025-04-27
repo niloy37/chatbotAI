@@ -7,6 +7,7 @@ from typing import Callable, List
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import Pinecone
 
 # Load environment variables
 load_dotenv()
@@ -74,8 +75,6 @@ def download_embeddings(
     """
     Load PDFs, split into chunks, and upsert embeddings into Pinecone.
     """
-    from langchain.vectorstores import Pinecone
-
     # 1) Load documents
     docs = load_pdf_file(path)
 
