@@ -66,8 +66,7 @@ qa_chain = RetrievalQA.from_chain_type(
     retriever=retriever,
     return_source_documents=True,  # Enable source documents for debugging
     chain_type_kwargs={
-        "prompt": prompt,
-        "input_variables": ["query", "context"]  # Explicitly specify input variables
+        "prompt": prompt
     }
 )
 
