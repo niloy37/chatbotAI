@@ -2,7 +2,7 @@ import os
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
-
+import sys
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.helper import get_embedding_model
 from langchain_community.vectorstores import Pinecone as LangChainPinecone
@@ -86,13 +86,20 @@ def ask():
         return jsonify({'answer': 'Please provide a question.'})
 
     try:
-        # instead of .invoke({ "query": question })
-        # just run the chain with the question text
-        answer = qa_chain.run(question)
+        # correctly invoke the chain with its 'query' input key
+        result = qa_chain({ "query": question })
+
+        # extract the answer from the dict
+        if isinstance(result, dict):
+            answer = result.get("result") or result.get("answer") or ""
+        else:
+            # some versions return a raw string
+            answer = str(result)
+
         return jsonify({'answer': answer})
 
     except Exception as e:
-        # log the error for debugging
+        # will now correctly print to stderr
         print(f"Error in /ask: {e}", file=sys.stderr)
 
         if app.debug:
@@ -101,6 +108,7 @@ def ask():
                 'error': str(e)
             })
         return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
+
 
 if __name__ == '__main__':
     app.run(debug=True)
