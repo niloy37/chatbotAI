@@ -82,7 +82,7 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        answer = qa_chain.run({"input": question})
+        answer = qa_chain.run({"query": question})
         return jsonify({'answer': answer})
     except Exception as e:
         print(f"Error: {str(e)}")
