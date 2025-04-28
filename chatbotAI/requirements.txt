@@ -4,3 +4,4 @@ langchain-google-genai
 openai
 pinecone-client
 PyMuPDF
+gunicorn
