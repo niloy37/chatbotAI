@@ -1,8 +1,8 @@
 flask
+gunicorn
 langchain
 langchain-google-genai
 openai
-pinecone-client
+pinecone
 PyMuPDF
-gunicorn
 langchain-community
