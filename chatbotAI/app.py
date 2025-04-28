@@ -1,113 +1,87 @@
 import os
-import sys
-from flask import Flask, render_template, request, jsonify
-from dotenv import load_dotenv
-from pinecone import Pinecone, ServerlessSpec
-from langchain_google_genai import ChatGoogleGenerativeAI
-from src.helper import get_embedding_model
-from langchain_community.vectorstores import Pinecone as LangChainPinecone
-from langchain.prompts import PromptTemplate
+from flask import Flask, request, jsonify, send_from_directory
+from langchain.vectorstores import Pinecone
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import CharacterTextSplitter
 from langchain.chains import RetrievalQA
-
-# Load environment variables
-load_dotenv()
-
-# Get API keys and environment
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
-    raise ValueError("Missing required environment variables. Check your .env file.")
-
-# Initialize Pinecone client
-pc = Pinecone(api_key=PINECONE_API_KEY)
-
-# Define index name
-INDEX_NAME = "chatbotai"
-
-# (Optional) ensure index exists; comment out if index already created
-# if INDEX_NAME not in [idx.name for idx in pc.list_indexes().names()]:
-#     pc.create_index(
-#         name=INDEX_NAME,
-#         dimension=768,
-#         metric="cosine",
-#         spec=ServerlessSpec(
-#             cloud="aws",
-#             region=PINECONE_ENV
-#         )
-#     )
-
-# Initialize Gemini LLM
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",
-    google_api_key=GOOGLE_API_KEY,
-    temperature=0.3,
-    convert_system_message_to_human=True
-)
-
-# Initialize embeddings model
-embeddings = get_embedding_model()
-
-# Connect to existing Pinecone index in LangChain vector store
-vector_store = LangChainPinecone.from_existing_index(
-    index_name=INDEX_NAME,
-    embedding=embeddings
-)
-
-# Build retriever
-retriever = vector_store.as_retriever(
-    search_type="similarity",
-    search_kwargs={"k": 3}
-)
-
-# Define system prompt template
-system_prompt = (
-    "You are an assistant for question-answering tasks. "
-    "Use the following pieces of retrieved context to answer the question. "
-    "If you don't know the answer, just say that you don't know. Don't make up an answer. "
-    "Answer in a concise and friendly manner.\n\n"
-    "Context: {context}\n"
-    "Question: {query}\n"
-    "Answer: "
-)
-prompt = PromptTemplate(
-    template=system_prompt,
-    input_variables=["context", "query"],
-)
-
-# Build RetrievalQA chain
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    chain_type="stuff",
-    retriever=retriever,
-    return_source_documents=True,
-    input_key="query",
-    output_key="result",
-    chain_type_kwargs={"prompt": prompt},
-)
+from langchain_google_genai import ChatGoogleGenerativeAI
+import pinecone
 
 # Initialize Flask app
 app = Flask(__name__)
 
-@app.route('/')
+# Configuration - get environment variables
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV = os.getenv("PINECONE_ENVIRONMENT") or os.getenv("PINECONE_ENV")
+PINECONE_INDEX = os.getenv("PINECONE_INDEX_NAME", "chatbot-index")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# Initialize Pinecone
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+index_name = PINECONE_INDEX
+if index_name not in pinecone.list_indexes():
+    pinecone.create_index(index_name=index_name, dimension=1536, metric="cosine")
+
+# Initialize OpenAI embeddings
+embeddings = OpenAIEmbeddings()
+
+# Check if the index is empty
+index_obj = pinecone.Index(index_name)
+stats = index_obj.describe_index_stats()
+is_empty = True
+if stats and stats["namespaces"]:
+    ns_stats = stats["namespaces"].get("", {})
+    if ns_stats.get("vector_count", 0) > 0:
+        is_empty = False
+
+# Load PDFs and populate Pinecone if needed
+if is_empty:
+    docs = []
+    data_folder = "Data"
+    text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    for filename in os.listdir(data_folder):
+        if filename.lower().endswith(".pdf"):
+            file_path = os.path.join(data_folder, filename)
+            loader = PyPDFLoader(file_path)
+            pages = loader.load()
+            for page in pages:
+                split_docs = text_splitter.split_documents([page])
+                docs.extend(split_docs)
+    if docs:
+        vectorstore = Pinecone.from_documents(
+            documents=docs,
+            embedding=embeddings,
+            index_name=index_name,
+        )
+else:
+    vectorstore = Pinecone.from_existing_index(index_name=index_name, embedding=embeddings)
+
+# Create retriever and QA chain
+retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-turbo", google_api_key=GOOGLE_API_KEY)
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=retriever,
+    return_source_documents=False,
+    chain_type="stuff",
+    input_key="query",
+    output_key="answer"
+)
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return send_from_directory(directory='.', filename='index.html')
 
-@app.route('/ask', methods=['POST'])
+@app.route("/ask", methods=["POST"])
 def ask():
-    data = request.get_json()
-    question = data.get('question', '').strip()
-    if not question:
-        return jsonify({'answer': 'Please provide a question.'})
-    try:
-        result = qa_chain.invoke({"query": question})
-        answer = result.get('result', '')
-        return jsonify({'answer': answer})
-    except Exception as e:
-        print(f"Error in /ask: {e}", file=sys.stderr)
-        if app.debug:
-            return jsonify({'answer': 'Sorry, I encountered an error.', 'error': str(e)})
-        return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
+    data = request.get_json(force=True)
+    user_input = data.get("message") or data.get("question") or ""
+    if not user_input:
+        return jsonify({"answer": ""})
+    result = qa_chain({"query": user_input})
+    answer = result["answer"] if isinstance(result, dict) else result
+    return jsonify({"answer": answer})
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
