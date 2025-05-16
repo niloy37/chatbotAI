@@ -1,13 +1,13 @@
 import os
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
-from pinecone import Pinecone, ServerlessSpec
+from pinecone import Pinecone
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-from src.helper import get_embedding_model
-from langchain_community.vectorstores import Pinecone as LangChainPinecone
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import Pinecone as LangchainPinecone
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import RetrievalQA
+from langchain.schema.runnable import RunnablePassthrough
 
 # Load environment variables
 load_dotenv()
@@ -15,7 +15,7 @@ load_dotenv()
 # Get API keys and environment
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
+PINECONE_ENV = os.getenv("PINECONE_ENV")
 if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
@@ -31,11 +31,14 @@ llm = ChatGoogleGenerativeAI(
 )
 
 # Initialize embeddings model
-embeddings = get_embedding_model()
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/embedding-001",
+    google_api_key=GOOGLE_API_KEY
+)
 
 # Connect to existing Pinecone index
 INDEX_NAME = "chatbotai"
-vector_store = LangChainPinecone.from_existing_index(
+vector_store = LangchainPinecone.from_existing_index(
     index_name=INDEX_NAME,
     embedding=embeddings
 )
@@ -47,28 +50,24 @@ retriever = vector_store.as_retriever(
 )
 
 # Custom system prompt
-system_prompt = (
-    "You are an assistant for question-answering tasks. "
-    "Use the following pieces of retrieved context to answer the question. "
-    "If you don't know the answer, just say that you don't know. Don't make up an answer. "
-    "Answer in a concise and friendly manner.\n\n"
-    "Context: {context}\n"
-    "Question: {query}\n"
-    "Answer: "
-)
+template = """You are an assistant for question-answering tasks. 
+Use the following pieces of retrieved context to answer the question. 
+If you don't know the answer, just say that you don't know. Don't make up an answer.
+Answer in a concise and friendly manner.
 
-# Create prompt template
-prompt = ChatPromptTemplate.from_template(system_prompt)
+Context: {context}
 
-# Create RetrievalQA chain with custom prompt
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    chain_type="stuff",
-    retriever=retriever,
-    return_source_documents=True,
-    chain_type_kwargs={
-        "prompt": prompt
-    }
+Question: {question}
+
+Answer:"""
+
+prompt = ChatPromptTemplate.from_template(template)
+
+# Create the chain
+chain = (
+    {"context": retriever, "question": RunnablePassthrough()}
+    | prompt
+    | llm
 )
 
 # Initialize Flask app
@@ -85,32 +84,11 @@ def ask():
     if not question:
         return jsonify({'answer': 'Please provide a question.'})
     try:
-        # Use the correct input format
-        result = qa_chain.invoke({
-            "query": question
-        })
-        
-        # Handle the response
-        if isinstance(result, dict):
-            if "result" in result:
-                answer = result["result"]
-            elif "answer" in result:
-                answer = result["answer"]
-            else:
-                answer = str(result)
-        else:
-            answer = str(result)
-            
-        return jsonify({'answer': answer})
+        response = chain.invoke(question)
+        return jsonify({'answer': response.content})
     except Exception as e:
         print(f"Error: {str(e)}")
-        # Return more detailed error information in development
-        if app.debug:
-            return jsonify({
-                'answer': 'Sorry, I encountered an error.',
-                'error': str(e)
-            })
-        return jsonify({'answer': 'Sorry, I encountered an error. Please try again.'})
+        return jsonify({'answer': f'Error: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -1,25 +1,31 @@
+```python
 # store_index.py
 import os
 import glob
 from dotenv import load_dotenv
-from src.helper import load_pdf_file, text_split, download_embeddings
-from langchain_community.vectorstores import Pinecone as LangChainPinecone
-from pinecone import Pinecone, ServerlessSpec
+import pinecone
+from typing import Optional
 
-from src.helper import get_embedding_model
+from src.helper import load_pdf_file, text_split, get_embedding_model
+from langchain.vectorstores import Pinecone
 
 # Load environment variables
 load_dotenv()
 
-# Get API keys
+# Get API keys and environment
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
 
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY]):
-    raise ValueError("Missing required API keys. Check your .env file.")
+if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
+    raise ValueError("Missing required environment variables. Check your .env file.")
 
-# Initialize Pinecone
-pc = Pinecone(api_key=PINECONE_API_KEY)
+# Initialize Pinecone client
+pinecone.init(
+    api_key=PINECONE_API_KEY,
+    environment=PINECONE_ENV
+)
+
 
 def create_vector_store(
     data_path: str = "Data/",
@@ -28,7 +34,7 @@ def create_vector_store(
     metric: str = "cosine",
     chunk_size: int = 500,
     chunk_overlap: int = 20
-) -> LangChainPinecone:
+) -> Pinecone:
     """
     Load PDFs, split into chunks, initialize index if needed, and upsert to Pinecone.
     Returns:
@@ -48,16 +54,16 @@ def create_vector_store(
     embeddings = get_embedding_model()
 
     # 4) Create index if it doesn't exist
-    existing_indexes = pc.list_indexes()
+    existing_indexes = pinecone.list_indexes()
     if index_name not in existing_indexes:
-        pc.create_index(
+        pinecone.create_index(
             name=index_name,
             dimension=dimension,
             metric=metric
         )
 
     # 5) Build and return the vector store
-    store = LangChainPinecone.from_documents(
+    store = Pinecone.from_documents(
         documents=chunks,
         embedding=embeddings,
         index_name=index_name
