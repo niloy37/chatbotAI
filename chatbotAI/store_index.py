@@ -1,36 +1,44 @@
-```python
-# store_index.py
+"""
+Vector Database Initialization Script
+
+This script loads PDF documents, processes them into vector embeddings,
+and stores them in Pinecone vector database for retrieval.
+
+Usage:
+    python store_index.py
+
+Author: [Your Name]
+Created: 2025
+"""
+
 import os
 import glob
 from dotenv import load_dotenv
-import pinecone
+from pinecone import Pinecone
 from typing import Optional
 
 from src.helper import load_pdf_file, text_split, get_embedding_model
-from langchain.vectorstores import Pinecone
+from langchain_community.vectorstores import Pinecone as LangchainPinecone
 
 # Load environment variables
 load_dotenv()
 
 # Get API keys and environment
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
 
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
+if not all([OPENAI_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
-pinecone.init(
-    api_key=PINECONE_API_KEY,
-    environment=PINECONE_ENV
-)
+pc = Pinecone(api_key=PINECONE_API_KEY)
 
 
 def create_vector_store(
     data_path: str = "Data/",
     index_name: str = "chatbotai",
-    dimension: int = 768,
+    dimension: int = 1536,  # OpenAI embeddings dimension
     metric: str = "cosine",
     chunk_size: int = 500,
     chunk_overlap: int = 20
@@ -53,17 +61,11 @@ def create_vector_store(
     # 3) Get embedding model
     embeddings = get_embedding_model()
 
-    # 4) Create index if it doesn't exist
-    existing_indexes = pinecone.list_indexes()
-    if index_name not in existing_indexes:
-        pinecone.create_index(
-            name=index_name,
-            dimension=dimension,
-            metric=metric
-        )
+    # 4) Since we already created the index, we don't need to check/create it again
+    # The index already exists from our previous script
 
     # 5) Build and return the vector store
-    store = Pinecone.from_documents(
+    store = LangchainPinecone.from_documents(
         documents=chunks,
         embedding=embeddings,
         index_name=index_name
@@ -74,5 +76,4 @@ def create_vector_store(
 
 if __name__ == "__main__":
     vs = create_vector_store()
-    print(f"Vector store '{vs.index_name}' created successfully with {len(vs._index.describe_index_stats()['namespaces'])} namespaces.")
-```
+    print(f"Vector store created successfully!")

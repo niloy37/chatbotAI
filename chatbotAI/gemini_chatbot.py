@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import pinecone
 
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from src.helper import load_pdf_file, text_split, get_embedding_model
 from langchain.vectorstores import Pinecone
 
@@ -10,11 +10,11 @@ from langchain.vectorstores import Pinecone
 load_dotenv()
 
 # Get API keys and environment
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENV = os.getenv("PINECONE_ENV")  # e.g., "us-west1-gcp"
 
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
+if not all([OPENAI_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
@@ -23,12 +23,11 @@ pinecone.init(
     environment=PINECONE_ENV
 )
 
-# Initialize the Gemini LLM
-llm = ChatGoogleGenerativeAI(
-    model="gemini-pro",
-    google_api_key=GOOGLE_API_KEY,
-    temperature=0.7,
-    convert_system_message_to_human=True
+# Initialize the OpenAI LLM (GPT-3.5-turbo is the cheapest model)
+llm = ChatOpenAI(
+    model="gpt-3.5-turbo",
+    openai_api_key=OPENAI_API_KEY,
+    temperature=0.7
 )
 
 # Initialize embeddings model

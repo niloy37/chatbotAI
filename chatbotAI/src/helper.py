@@ -1,3 +1,15 @@
+"""
+Helper functions for document processing and vector embeddings
+
+This module provides utilities for:
+- Loading and parsing PDF documents
+- Text chunking and splitting
+- OpenAI embedding model initialization
+
+Author: [Your Name]
+Created: 2025
+"""
+
 import os
 import glob
 from dotenv import load_dotenv
@@ -6,15 +18,15 @@ from typing import Callable, List
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 # Load environment variables
 load_dotenv()
 
-# Get Google API key
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    raise ValueError("GOOGLE_API_KEY not found. Check your .env file.")
+# Get OpenAI API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY not found. Check your .env file.")
 
 
 def load_pdf_file(path: str) -> List[Document]:
@@ -54,13 +66,12 @@ def text_split(documents: List[Document], chunk_size: int = 500, chunk_overlap: 
     return splitter.split_documents(documents)
 
 
-def get_embedding_model() -> GoogleGenerativeAIEmbeddings:
+def get_embedding_model() -> OpenAIEmbeddings:
     """
-    Initialize and return the Google Generative AI embeddings model.
+    Initialize and return the OpenAI embeddings model.
     """
-    return GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001",
-        google_api_key=GOOGLE_API_KEY
+    return OpenAIEmbeddings(
+        openai_api_key=OPENAI_API_KEY
     )
 
 

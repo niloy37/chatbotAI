@@ -1,9 +1,21 @@
+"""
+Medical Chatbot with RAG (Retrieval-Augmented Generation)
+
+A Flask-based web application that provides intelligent medical Q&A using:
+- OpenAI's GPT-3.5-turbo for natural language generation
+- Pinecone vector database for document retrieval
+- LangChain for orchestrating the RAG pipeline
+
+Author: [Your Name]
+Created: 2025
+"""
+
 import os
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from pinecone import Pinecone
 
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import Pinecone as LangchainPinecone
 from langchain.prompts import ChatPromptTemplate
 from langchain.chains import RetrievalQA
@@ -13,27 +25,25 @@ from langchain.schema.runnable import RunnablePassthrough
 load_dotenv()
 
 # Get API keys and environment
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_ENV = os.getenv("PINECONE_ENV")
-if not all([GOOGLE_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
+if not all([OPENAI_API_KEY, PINECONE_API_KEY, PINECONE_ENV]):
     raise ValueError("Missing required environment variables. Check your .env file.")
 
 # Initialize Pinecone client
 pc = Pinecone(api_key=PINECONE_API_KEY)
 
-# Initialize Gemini LLM
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",
-    google_api_key=GOOGLE_API_KEY,
-    temperature=0.3,
-    convert_system_message_to_human=True
+# Initialize OpenAI LLM (GPT-3.5-turbo is the cheapest model)
+llm = ChatOpenAI(
+    model="gpt-3.5-turbo",
+    openai_api_key=OPENAI_API_KEY,
+    temperature=0.3
 )
 
 # Initialize embeddings model
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/embedding-001",
-    google_api_key=GOOGLE_API_KEY
+embeddings = OpenAIEmbeddings(
+    openai_api_key=OPENAI_API_KEY
 )
 
 # Connect to existing Pinecone index
